@@ -2,7 +2,7 @@ const { optimize } = require("webpack");
 
 module.exports = {
     entry : {
-        mian : './main.js'
+        main : './tic-tac-toe.js'
     },
     module: {
         rules: [
