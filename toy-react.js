@@ -111,6 +111,7 @@ class ElementWrapper extends Component{
         this.root = document.createElement(type);
     }
 
+    /*
     setAttribute(name, value) {
         if (name.match(/^on([\s\S]+)/)) {
             this.root.addEventListener(RegExp.$1.replace(/^[\s\S]/, c => c.toLowerCase()), value);
@@ -130,7 +131,7 @@ class ElementWrapper extends Component{
         range.deleteContents();
         component[RENDER_TO_DOM](range);
     }
-
+*/
     get vdom() {
         return {
             type: this.type,
