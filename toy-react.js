@@ -57,6 +57,10 @@ export class Component {
         return this.render().vdom;
     }
 
+    get vchildren() {
+        return this.children.map(child => child.vdom);
+    }
+
     //range 位置
     [RENDER_TO_DOM](range) {
         this._range = range;
@@ -104,11 +108,10 @@ export class Component {
  */}
 
 
-class ElementWrapper extends Component{
+class ElementWrapper extends Component {
     constructor(type) {
         super(type);
         this.type = type;
-        this.root = document.createElement(type);
     }
 
     /*
@@ -133,33 +136,63 @@ class ElementWrapper extends Component{
     }
 */
     get vdom() {
-        return {
+        return this
+        /* {
             type: this.type,
             props: this.props,
             children: this.children.map(child => child.vdom) //这个语法是什么意思？
-        }
+        } */
     }
-    
+
+
     [RENDER_TO_DOM](range) {
+
         range.deleteContents();
-        range.insertNode(this.root);
+
+        let root = document.createElement(this.type);
+
+        for (const name in this.props) {
+            let value = this.props[name];
+            if (name.match(/^on([\s\S]+)/)) {
+                root.addEventListener(RegExp.$1.replace(/^[\s\S]/, c => c.toLowerCase()), value);
+            } else {
+                if (name === "className") {
+                    root.setAttribute("class", value);
+                } else {
+                    root.setAttribute(name, value);
+                }
+            }
+        }
+
+        for (const child of this.children) {
+            let childRange = document.createRange();
+            childRange.setStart(root, root.childNodes.length);
+            childRange.setEnd(root, root.childNodes.length);
+            childRange.deleteContents();
+            child[RENDER_TO_DOM](childRange);
+        }
+
+        range.insertNode(root);
     }
 
 }
 
-class TextWrapper extends Component{
+class TextWrapper extends Component {
     constructor(content) {
         super(content);
+        this.type = "#text";
         this.content = content;
         this.root = document.createTextNode(content);
     }
 
     get vdom() {
-        return {
+        return this
+        /* {
             type: "#text",
             content: this.content
-        }
+        } */
     }
+
     [RENDER_TO_DOM](range) {
         range.deleteContents();
         range.insertNode(this.root);
