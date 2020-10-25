@@ -57,32 +57,99 @@ export class Component {
         return this.render().vdom;
     }
 
-    get vchildren() {
-        return this.children.map(child => child.vdom);
-    }
-
     //range 位置
     [RENDER_TO_DOM](range) {
         this._range = range;
-        this.render()[RENDER_TO_DOM](range);
+        this._vdom = this.vdom;
+        this._vdom[RENDER_TO_DOM](range);
     }
 
-    rerender() {
-        let oldRange = this._range;
+    update() {
 
-        let range = document.createRange();
-        range.setStart(oldRange.startContainer, oldRange.startOffset);
-        range.setEnd(oldRange.startContainer, oldRange.startOffset);
-        this[RENDER_TO_DOM](range);
+        let isSameNode = (oldNode, newNode) => {
+            if (oldNode.type !== newNode.type) {
+                return false;
+            }
 
-        oldRange.setStart(range.endContainer, range.endOffset);
-        oldRange.deleteContents();
+            for (const name in newNode.props) {
+                if (newNode.props[name] !== oldNode.props[name]) {
+                    return false;
+                }
+            }
+
+            if (Object.keys(newNode.props).length > Object.keys(oldNode.props).length) {
+                return false;
+            }
+
+            if (newNode.type === "#text") {
+                if (newNode.content !== oldNode.content) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        //做对比，然后只渲染有变化的节点，比较简单的算法
+        let update = (oldNode, newNode) => {
+            //type 如果不同，完全替换
+            //props 打patch的方式。这里简化这个逻辑，
+            //children
+            //content 打patch的方式，这里也简化成replace
+
+            if (!isSameNode(oldNode, newNode)) {
+                newNode[RENDER_TO_DOM](oldNode._range);
+                return;
+            }
+
+            newNode._range = oldNode._range;
+
+            let newChildren = newNode.vchildren;
+            let oldChildren = oldNode.vchildren;
+
+            if (!newChildren || !newChildren.length) {
+                return;
+            }
+            let tailRange = oldChildren[oldChildren.length - 1]._range;
+            
+            for (let i = 0; i < newChildren.length; i++) {
+                let newChild = newChildren[i];
+                let oldChild = oldChildren[i];
+                if (i < oldChildren.length) {
+                    update(oldChild, newChild);
+                } else {
+                    let range = document.createRange();
+                    range.setStart(tailRange.endContainer,tailRange.endOffset);
+                    range.setEnd(tailRange.endContainer,tailRange.endOffset);
+                    newChild[RENDER_TO_DOM](range);
+                    tailRange = range;
+                }
+            }
+
+        }
+
+        let vdom = this.vdom;
+        update(this._vdom, vdom);
+        this._vdom = vdom;
+
     }
 
+    /*     rerender() {
+            let oldRange = this._range;
+    
+            let range = document.createRange();
+            range.setStart(oldRange.startContainer, oldRange.startOffset);
+            range.setEnd(oldRange.startContainer, oldRange.startOffset);
+            this[RENDER_TO_DOM](range);
+    
+            oldRange.setStart(range.endContainer, range.endOffset);
+            oldRange.deleteContents();
+        }
+     */
     setState(newState) {
         if (this.state === null || typeof this.state !== "object") {
             this.state = newState;
-            this.rerender();
+            this.update();
             return;
         }
 
@@ -96,7 +163,7 @@ export class Component {
             }
         }
         merge(this.state, newState);
-        this.rerender();
+        this.update();
     }
     //从取一个元素，变成把它渲染进一个range里面
 /*     get root() {
@@ -136,6 +203,7 @@ class ElementWrapper extends Component {
     }
 */
     get vdom() {
+        this.vchildren = this.children.map(child => child.vdom);
         return this
         /* {
             type: this.type,
@@ -146,8 +214,8 @@ class ElementWrapper extends Component {
 
 
     [RENDER_TO_DOM](range) {
+        this._range = range;
 
-        range.deleteContents();
 
         let root = document.createElement(this.type);
 
@@ -164,7 +232,10 @@ class ElementWrapper extends Component {
             }
         }
 
-        for (const child of this.children) {
+        if (!this.vchildren)
+            this.vchildren = this.children.map(child => child.vdom);
+
+        for (const child of this.vchildren) {
             let childRange = document.createRange();
             childRange.setStart(root, root.childNodes.length);
             childRange.setEnd(root, root.childNodes.length);
@@ -172,7 +243,7 @@ class ElementWrapper extends Component {
             child[RENDER_TO_DOM](childRange);
         }
 
-        range.insertNode(root);
+        replaceContent(range, root);
     }
 
 }
@@ -182,7 +253,6 @@ class TextWrapper extends Component {
         super(content);
         this.type = "#text";
         this.content = content;
-        this.root = document.createTextNode(content);
     }
 
     get vdom() {
@@ -194,12 +264,21 @@ class TextWrapper extends Component {
     }
 
     [RENDER_TO_DOM](range) {
-        range.deleteContents();
-        range.insertNode(this.root);
+        this._range = range;
+        let root = document.createTextNode(this.content);
+        replaceContent(range, root);
     }
 
 }
 
+function replaceContent(range, node) {
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.deleteContents();
+
+    range.setStartBefore(node);
+    range.setEndAfter(node);
+}
 
 export function render(component, parentElement) {
     let range = document.createRange();
